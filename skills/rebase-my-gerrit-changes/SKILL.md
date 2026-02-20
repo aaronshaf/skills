@@ -23,9 +23,9 @@ See: https://github.com/aaronshaf/ger
 
 ## Schedule
 
-Run this skill at: **6am, 12pm, 6pm, midnight** (four times daily).
+Run this skill at: **9am, 3pm** (twice daily).
 
-Cron expression: `0 0,6,12,18 * * *`
+Cron expression: `0 9,15 * * *`
 
 ## Criteria for Rebasing
 
