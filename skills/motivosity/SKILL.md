@@ -244,3 +244,9 @@ POST /user/changePayrollID
 - **Company values** — required for appreciations. Fetch with `GET /companyvalue`, match by name or let user pick.
 - **Feed pagination** — `page=0,1,2...` with `pageLimit` (default 10, max ~50).
 - **401/403** — re-extract `xct` from DevTools first. If still failing, re-extract all cookies.
+
+---
+
+## References
+
+- [Motivosity API docs](https://help.motivosity.com/en/articles/9044579-motivosity-api)
