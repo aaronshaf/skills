@@ -76,14 +76,27 @@ Notes:
 
 ### Service account (admins only)
 
+Admins can create API keys at **Setup → Integrations → API Key → + New API Key**. This gives you an `APP_ID` and `APP_SECRET` (also called `SECURE_TOKEN`).
+
+Exchange for a short-lived access token (15 min):
+
 ```
 POST https://app.motivosity.com/auth/v1/servicetoken
 Content-Type: application/json
 
-{"appId":"<APP_ID>","secureToken":"<SECURE_TOKEN>"}
+{"appId":"<APP_ID>","secureToken":"<APP_SECRET>"}
 ```
 
-Returns `{"accessToken":"...","expiresIn":"900"}`. Use as `Authorization: Bearer <accessToken>`. Token lasts 15 min — refresh on 401.
+Returns `{"accessToken":"...","expiresIn":"900"}`. Use as `Authorization: Bearer <accessToken>`. Refresh on 401.
+
+### OAuth2 (admins — web app integrations)
+
+For client-side integrations, Motivosity supports OAuth2:
+
+- **Authorization:** `GET /oauth2/v1/auth`
+- **Token exchange/refresh:** `POST /oauth2/v1/token`
+
+See the [Motivosity API docs](https://help.motivosity.com/en/articles/9044579-motivosity-api) and the [reference implementation](https://github.com/scjnsn/Motivosity-Demo-app) for the full OAuth2 flow.
 
 ---
 
