@@ -19,60 +19,38 @@ This returns `response.user.id`, `response.company.id`, and feature flags. Do th
 
 ## Authentication
 
-Most users don't have a service account. Default to the DevTools approach.
+This skill requires browser access via the **chrome-devtools MCP**. Make sure `app.motivosity.com` is open in Chrome before proceeding.
 
-### DevTools (most users)
+### chrome-devtools MCP
 
-Ask the user to do this once while logged in to `app.motivosity.com`:
-
-> "I need two things from your browser DevTools:
->
-> **1. xct token** — Open DevTools (`F12`) → Network tab → reload the page → click any request to `/api/` → look under Request Headers → copy the `xct` value.
->
-> **2. Cookies** — DevTools → Application tab → Cookies → `https://app.motivosity.com` → copy the **Value** for:
-> - `MONSESSION`
-> - `AWSALB`
-> - `AWSALBCORS`
->
-> Paste all four values here and I'll take it from there."
-
-Use on every request:
+**Step 1: Select the Motivosity tab**
 ```
-Cookie: MONSESSION=<value>; AWSALB=<value>; AWSALBCORS=<value>
-xct: <value>
-Content-Type: application/json
+list_pages → select_page (pick the app.motivosity.com tab)
 ```
 
-**Credential lifetime:**
-- `MONSESSION` — days/weeks, tied to browser session
-- `xct` — short-lived CSRF JWT, expires after ~15–30 min of inactivity
-- `AWSALB`/`AWSALBCORS` — 7-day expiry
+**Step 2: Reload and grab a real request's Cookie and xct headers**
+```
+navigate_page (reload) → list_network_requests → get_network_request (pick any /api/private/ request)
+```
 
-**On 401/403:** Re-extract `xct` first (most common expiry). Still failing → re-extract all cookies.
+Note the full `cookie` and `xct` request header values. These are needed to understand what the browser is sending.
 
-### chrome-devtools MCP (if available)
+**Step 3: Make API calls via evaluate_script**
 
-If the `chrome-devtools` MCP is configured and `app.motivosity.com` is open in Chrome, skip manual extraction entirely. Use `list_pages` → `select_page` to select the Motivosity tab, then make calls with `evaluate_script`:
+Use `evaluate_script` to make `fetch` calls from within the browser — this sends the browser's own cookies automatically:
 
-```javascript
+```js
 async () => {
-  const xct = document.cookie
-    .split(';')
-    .find(c => c.trim().startsWith('__Host-X-CSRF-Token='))
-    .split('=').slice(1).join('=');
-
-  const resp = await fetch('https://app.motivosity.com/api/private/context?page=%2Fhome', {
-    credentials: 'include',  // sends httpOnly MONSESSION automatically
-    headers: { 'xct': xct }
+  const res = await fetch('/api/private/context?page=%2Fhome', {
+    headers: { 'Accept': 'application/json' }
   });
-  return await resp.json();
+  return await res.json();
 }
 ```
 
-Notes:
-- `MONSESSION` is httpOnly — can't read it via JS, but `credentials: 'include'` sends it automatically
-- `xct` = value of the `__Host-X-CSRF-Token` cookie
-- `/api/private/*` works well this way; `/api/v2/*` may 401 (use private equivalents)
+> **Why evaluate_script:** Cookies (including httpOnly ones like `JSESSIONID`) are sent automatically by the browser. No need to extract or pass them manually.
+
+**On 401/403:** Reload the page (`navigate_page reload`) and retry.
 
 ### Service account (admins only)
 
@@ -132,34 +110,51 @@ Key response fields:
 
 | Task | Method | Path |
 |------|--------|------|
-| Current user | GET | `/user/me` |
-| Search by name/email | GET | `/user/search?name=<query>` |
-| List all users | GET | `/user?scope=CMPY&page=0&pageLimit=20` |
-| Individual user | GET | `/user/<userId>` |
-| User profile | GET | `/user/<userId>/profile` |
-| My cash balances | GET | `/usercash` |
+| Search by name (typeahead) | GET | `/api/private/usertypeahead?name=<query>&ignoreSelf=true&includeUserGroups=false` |
+| My cash balances | GET | `/api/private/usercash` |
+
+> **Note:** `/api/v2/user/search` requires a Bearer token and won't work with session cookies. Use `/api/private/usertypeahead` instead — it works with the cookie-based auth and returns user IDs needed for appreciations.
 
 ### Appreciations
 
-| Task | Method | Path |
-|------|--------|------|
-| Send appreciation | PUT | `/appreciation` |
-| List company values | GET | `/companyvalue` |
+**Get company values** (included in appreciation setup response):
+```
+GET /api/private/appreciation/setup
+```
+Returns `response.values[]` with `id` and `name` for each value.
 
-**Workflow:** Get company values first → let user pick one → send appreciation.
+**Send appreciation:**
+```
+PUT /api/private/post?type=APPR
+```
 
 ```json
 {
-  "amount": 5,
-  "amountType": "GM",
-  "note": "Great work on the project!",
-  "companyValueID": "<value-id>",
-  "toUserEmails": ["user@company.com"]
+  "options": {
+    "isPrivate": false,
+    "postAsPlatform": false,
+    "scheduledDate": null,
+    "postAsUserId": null,
+    "featureUntilDate": null
+  },
+  "noteText": "Great work on the project!",
+  "recipients": [
+    {
+      "userId": "<target-user-id>",
+      "amount": 1,
+      "purseType": "GM",
+      "giftId": null
+    }
+  ],
+  "otherProperties": {
+    "companyValueId": "<value-id>"
+  }
 }
 ```
 
-- `amountType`: `GM` = giving money, `SM` = spending money
-- Target by `toUserIDs`, `toUserEmails`, or `toUserPayrollIDs`
+- `purseType`: `GM` = giving money
+- Minimum amount is `1` (whole dollar)
+- `userId` from `usertypeahead` search
 
 ### Awards
 
@@ -253,10 +248,14 @@ POST /user/changePayrollID
 ## Tips
 
 - **Always bootstrap first** — call `/api/private/context` to get userId, companyId, and monthly budget before doing anything else.
-- **Finding users** — use `/user/search?name=<query>` to get their ID, then use the ID for appreciation/award calls.
-- **Company values** — required for appreciations. Fetch with `GET /companyvalue`, match by name or let user pick.
+- **Use evaluate_script for all API calls** — fetch from within the browser so cookies are sent automatically. No need to extract or pass cookies manually.
+- **Requires chrome-devtools MCP** — `app.motivosity.com` must be open in Chrome.
+- **Finding users** — use `GET /api/private/usertypeahead?name=<query>` (not `/api/v2/user/search` which requires Bearer auth).
+- **Company values** — use `GET /api/private/appreciation/setup` which returns values alongside other setup data in one call.
+- **Send appreciations** — use `PUT /api/private/post?type=APPR` (not `/api/private/appreciation` which 404s).
+- **Minimum appreciation amount** — $1 (whole dollars only).
 - **Feed pagination** — `page=0,1,2...` with `pageLimit` (default 10, max ~50).
-- **401/403** — re-extract `xct` from DevTools first. If still failing, re-extract all cookies.
+- **401/403** — reload the page, grab a fresh network request, re-extract `xct` and cookies.
 
 ---
 
