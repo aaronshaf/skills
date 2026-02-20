@@ -77,7 +77,10 @@ Run for each change that passes all checks. No confirmation needed.
 
 ### 4. Report
 
-After processing, summarize:
-- How many changes were checked
-- How many were rebased
-- Any that were skipped (conflict, already rebased, prior failed attempt)
+Only report if at least one change was rebased. Use terse bullet points:
+
+- ✅ Rebased #401518, #401525
+- ⏭️ Skipped #401530 (merge conflict)
+- ⏭️ Skipped #401531 (prior failed rebase)
+
+If nothing was rebased, stay silent.
